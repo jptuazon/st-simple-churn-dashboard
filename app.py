@@ -1,13 +1,13 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import pickle
 from sklearn.base import BaseEstimator, TransformerMixin
 import miceforest as mf
 import plotly.express as px
+import compress_pickle as cpkl
 
 # Constants
-DATA_URL = "./data/credit_card_attrition_dataset_justin.csv"
+data_files = [f"./data/sample_data_{_ + 1}.csv" for _ in range(6)]
 
 # Config
 st.set_page_config(
@@ -41,9 +41,7 @@ class ImputeMissing(BaseEstimator, TransformerMixin):
         return self.kernel.impute_new_data(X).complete_data()
 
 
-with open("final_model.pickle", "rb") as file:
-    final_model = pickle.load(file)
-    file.close()
+final_model = cpkl.load('./models/compressed_model.pkl.gz')
 
 
 def predict(X):
@@ -91,11 +89,14 @@ def get_prediction():
 
 
 # Loading dataset
-def load_data(drop_na=True):
-    dataset = pd.read_csv(DATA_URL)
+def load_data(drop_duplicats=True, drop_na=True):
+    dfs = [pd.read_csv(data_file) for data_file in data_files]
+    dataset = pd.concat(dfs, ignore_index=True)
 
+    if drop_duplicats:
+        dataset = dataset.drop_duplicates().reset_index(drop=True)
     if drop_na:
-        dataset.dropna(inplace=True)
+        dataset = dataset.dropna()
 
     dataset["AttritionFlagNum"] = dataset["AttritionFlag"]
     dataset["AttritionFlag"] = dataset["AttritionFlag"].map({0: "Active", 1: "Churned"})
@@ -190,7 +191,6 @@ with st.sidebar.expander("Numerical Filters", expanded=True):
         "Age",
         FILTER_DEFAULT_MIN_AGE,
         FILTER_DEFAULT_MAX_AGE,
-        (FILTER_DEFAULT_MIN_AGE, FILTER_DEFAULT_MAX_AGE),
         key="filter_age"
     )
 
@@ -199,7 +199,6 @@ with st.sidebar.expander("Numerical Filters", expanded=True):
         "Income",
         FILTER_DEFAULT_MIN_INCOME,
         FILTER_DEFAULT_MAX_INCOME,
-        (FILTER_DEFAULT_MIN_INCOME, FILTER_DEFAULT_MAX_INCOME),
         key="filter_income"
     )
 
@@ -208,7 +207,6 @@ with st.sidebar.expander("Numerical Filters", expanded=True):
         "Credit Limit",
         FILTER_DEFAULT_MIN_CREDIT_LIMIT,
         FILTER_DEFAULT_MAX_CREDIT_LIMIT,
-        (FILTER_DEFAULT_MIN_CREDIT_LIMIT, FILTER_DEFAULT_MAX_CREDIT_LIMIT),
         key="filter_credit_limit"
     )
 
@@ -217,7 +215,6 @@ with st.sidebar.expander("Numerical Filters", expanded=True):
         "Transactions",
         FILTER_DEFAULT_MIN_TRANSACTIONS,
         FILTER_DEFAULT_MAX_TRANSACTIONS,
-        (FILTER_DEFAULT_MIN_TRANSACTIONS, FILTER_DEFAULT_MAX_TRANSACTIONS),
         key="filter_transactions"
     )
 
@@ -226,7 +223,6 @@ with st.sidebar.expander("Numerical Filters", expanded=True):
         "Spending",
         FILTER_DEFAULT_MIN_SPEND,
         FILTER_DEFAULT_MAX_SPEND,
-        (FILTER_DEFAULT_MIN_SPEND, FILTER_DEFAULT_MAX_SPEND),
         key="filter_spend"
     )
 
@@ -235,7 +231,6 @@ with st.sidebar.expander("Numerical Filters", expanded=True):
         "Tenure",
         FILTER_DEFAULT_MIN_TENURE,
         FILTER_DEFAULT_MAX_TENURE,
-        (FILTER_DEFAULT_MIN_TENURE, FILTER_DEFAULT_MAX_TENURE),
         key="filter_tenure"
     )
 
@@ -244,14 +239,12 @@ with st.sidebar.expander("Categorical Filters", expanded=True):
     gender_filter = st.multiselect(
         "Gender",
         FILTER_DEFAULT_GENDER,
-        FILTER_DEFAULT_GENDER,
         key="filter_gender"
     )
 
     # # # Marital Status
     filter_marital_status = st.multiselect(
         "Marital Status",
-        FILTER_DEFAULT_MARITAL_STATUS,
         FILTER_DEFAULT_MARITAL_STATUS,
         key="filter_marital_status"
     )
@@ -260,7 +253,6 @@ with st.sidebar.expander("Categorical Filters", expanded=True):
     filter_education = st.multiselect(
         "Education Level",
         FILTER_DEFAULT_EDUCATION,
-        FILTER_DEFAULT_EDUCATION,
         key="filter_education"
     )
 
@@ -268,14 +260,12 @@ with st.sidebar.expander("Categorical Filters", expanded=True):
     filter_card_type = st.multiselect(
         "Card Type",
         FILTER_DEFAULT_CARD_TYPE,
-        FILTER_DEFAULT_CARD_TYPE,
         key="filter_card_type"
     )
 
     # # # Country
     filter_country = st.multiselect(
         "Country",
-        FILTER_DEFAULT_COUNTRY,
         FILTER_DEFAULT_COUNTRY,
         key="filter_country"
     )
@@ -289,6 +279,11 @@ credit_min, credit_max = st.session_state.filter_credit_limit
 transactions_min, transactions_max = st.session_state.filter_transactions
 spend_min, spend_max = st.session_state.filter_spend
 tenure_min, tenure_max = st.session_state.filter_tenure
+gender = st.session_state.filter_gender
+marital_status = st.session_state.filter_marital_status
+education = st.session_state.filter_education
+card_type = st.session_state.filter_card_type
+country = st.session_state.filter_country
 
 filtered_data = filtered_data[
     (filtered_data["Age"] >= age_min) & (filtered_data["Age"] <= age_max) &
@@ -300,11 +295,11 @@ filtered_data = filtered_data[
     (filtered_data["Tenure"] >= tenure_min) & (filtered_data["Tenure"] <= tenure_max)
 ]
 
-filtered_data = filtered_data[filtered_data["Gender"].isin(st.session_state.filter_gender)]
-filtered_data = filtered_data[filtered_data["MaritalStatus"].isin(st.session_state.filter_marital_status)]
-filtered_data = filtered_data[filtered_data["EducationLevel"].isin(st.session_state.filter_education)]
-filtered_data = filtered_data[filtered_data["CardType"].isin(st.session_state.filter_card_type)]
-filtered_data = filtered_data[filtered_data["Country"].isin(st.session_state.filter_country)]
+filtered_data = filtered_data[filtered_data["Gender"].isin(gender)]
+filtered_data = filtered_data[filtered_data["MaritalStatus"].isin(marital_status)]
+filtered_data = filtered_data[filtered_data["EducationLevel"].isin(education)]
+filtered_data = filtered_data[filtered_data["CardType"].isin(card_type)]
+filtered_data = filtered_data[filtered_data["Country"].isin(country)]
 
 # Body
 st.write("#### Overview")
